@@ -28,7 +28,7 @@ def make_parser():
 def train(args):
   import models
   import numpy as np
-  np.random.seed(1234)
+  # np.random.seed(1234)
 
   if args.dataset == 'mnist':
     n_dim, n_out, n_channels = 28, 10, 1

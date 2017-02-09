@@ -6,7 +6,7 @@ import tensorflow as tf
 
 import matplotlib.pyplot as plt
 
-from keras.layers.convolutional import Convolution2D, Deconvolution2D
+from keras.layers.convolutional import Convolution2D, Deconvolution2D, ZeroPadding2D
 from keras.layers.normalization import BatchNormalization
 from keras.layers.advanced_activations import LeakyReLU
 from keras.layers.core import Dense, Reshape, Flatten, Activation
@@ -35,8 +35,8 @@ class DCGAN(object):
     with tf.name_scope('generator'):
       Xk_g = Input(shape=(n_lat,))
 
-      x = Dense(n_g_hid1)(Xk_g)
-      x = Dense(n_g_hid2*7*7)(x)
+      x = Dense(n_g_hid1, activation='relu')(Xk_g)
+      x = Dense(n_g_hid2*7*7, activation='relu')(x)
       x = Reshape((n_g_hid2, 7, 7))(x)
       x = Deconvolution2D(64, 5, 5, output_shape=(128, 64, 14, 14), 
             border_mode='same', activation=None, subsample=(2,2), 
@@ -51,14 +51,16 @@ class DCGAN(object):
     with tf.name_scope('discriminator'):
       Xk_d = Input(shape=(n_chan, n_dim, n_dim))
 
+      x = ZeroPadding2D(padding=(2,2), dim_ordering='th')(x)
       x = Convolution2D(nb_filter=64, nb_row=5, nb_col=5, subsample=(2,2),
-            activation=None, border_mode='same', init='glorot_uniform',
+            activation=None, border_mode='valid', init='glorot_uniform',
             dim_ordering='th')(Xk_d)
       x = BatchNormalization()(x)
       x = LeakyReLU(0.2)(x)
 
+      x = ZeroPadding2D(padding=(2,2), dim_ordering='th')(x)
       x = Convolution2D(nb_filter=128, nb_row=5, nb_col=5, subsample=(2,2),
-            activation=None, border_mode='same', init='glorot_uniform',
+            activation=None, border_mode='valid', init='glorot_uniform',
             dim_ordering='th')(x)
       x = BatchNormalization()(x)
       x = LeakyReLU(0.2)(x)
@@ -116,14 +118,6 @@ class DCGAN(object):
     # get gradients
     gv_g = optimizer_g.compute_gradients(self.loss_g, w_g)
     gv_d = optimizer_d.compute_gradients(self.loss_d, w_d)
-
-    for g,v in gv_g:
-      print g, v
-
-    print 'discriminator:'
-
-    for g,v in gv_d:
-      print g, v
 
     # create training operation
     self.train_op_g = optimizer_g.apply_gradients(gv_g)
