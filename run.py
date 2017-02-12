@@ -19,7 +19,9 @@ def make_parser():
   train_parser.add_argument('-l', '--logdir', default='logs/mnist-run')
   train_parser.add_argument('--alg', default='rmsprop')
   train_parser.add_argument('--lr', type=float, default=1e-3)
-  train_parser.add_argument('--n_batch', type=int, default=128)
+  train_parser.add_argument('--c', type=float, default=1e-2)
+  train_parser.add_argument('--n-critic', type=int, default=5)
+  train_parser.add_argument('--n-batch', type=int, default=128)
 
   return parser
 
@@ -41,12 +43,15 @@ def train(args):
     raise ValueError('Invalid dataset name: %s' % args.dataset)
 
   # set up optimization params
-  opt_params = { 'lr' : args.lr }
+  opt_params = { 'lr' : args.lr, 'c' : args.c, 'n_critic' : args.n_critic }
 
   # create model
   if args.model == 'dcgan':
     model = models.DCGAN(n_dim=n_dim, n_chan=n_channels,
                          opt_alg=args.alg, opt_params=opt_params)
+  elif args.model == 'wdcgan':
+    model = models.WDCGAN(n_dim=n_dim, n_chan=n_channels,
+                         opt_alg=args.alg, opt_params=opt_params)    
   else:
     raise ValueError('Invalid model')
   
