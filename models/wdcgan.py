@@ -14,6 +14,9 @@ from keras.layers.core import Dense, Reshape, Flatten, Activation
 from keras.layers import Input
 from keras.models import Model
 from keras import initializations
+from keras.regularizers import l1, l2, l1l2
+
+from tensorflow.examples.tutorials.mnist import input_data
 
 # ----------------------------------------------------------------------------
 
@@ -69,8 +72,8 @@ class WDCGAN(object):
     self.P = g_net(X_g)
 
     # create losses
-    self.loss_g = -tf.reduce_mean(d_fake)
-    self.loss_d = -(tf.reduce_mean(d_real) - tf.reduce_mean(d_fake))
+    self.loss_g = tf.reduce_mean(d_fake)
+    self.loss_d = tf.reduce_mean(d_real) - tf.reduce_mean(d_fake)
 
     # compute and store discriminator probabilities
     self.d_real = tf.reduce_mean(d_real)
@@ -82,7 +85,6 @@ class WDCGAN(object):
     lr = opt_params['lr']
     optimizer_g = tf.train.RMSPropOptimizer(lr)
     optimizer_d = tf.train.RMSPropOptimizer(lr)
-    optimizer_d0 = tf.train.AdamOptimizer()
 
     # get gradients
     gv_g = optimizer_g.compute_gradients(self.loss_g, self.w_g)
@@ -91,8 +93,6 @@ class WDCGAN(object):
     # create training operation
     self.train_op_g = optimizer_g.apply_gradients(gv_g)
     self.train_op_d = optimizer_d.apply_gradients(gv_d)
-    self.train_op_d0 = optimizer_d0.apply_gradients(gv_d)
-    self.train_op   = optimizer_d.apply_gradients(gv_d + gv_g)
 
     # clip the weights, so that they fall in [-c, c]
     self.clip_updates = [w.assign(tf.clip_by_value(w, -self.c, self.c)) for w in self.w_d]
@@ -101,6 +101,8 @@ class WDCGAN(object):
     # initialize log directory                  
     if tf.gfile.Exists(logdir): tf.gfile.DeleteRecursively(logdir)
     tf.gfile.MakeDirs(logdir)
+
+    mnist = input_data.read_data_sets('data/mnist')
 
     # # create a saver
     # checkpoint_root = os.path.join(logdir, 'model.ckpt')
@@ -115,50 +117,50 @@ class WDCGAN(object):
     self.sess.run(init)
 
     # train the model
-    step = 0
-    g_step = 0
-    for epoch in xrange(n_epoch):
-      start_time = time.time()
+    step, g_step, epoch = 0, 0, 0
+    while mnist.train.epochs_completed < n_epoch:
+    
       n_critic = 100 if g_step < 25 or (g_step+1) % 500 == 0 else self.n_critic
-      
-      minibatch_generator = iterate_minibatches(X_train, n_batch, shuffle=True)
-      for nb, X_batch in enumerate(minibatch_generator):
-        step += 1
+
+      start_time = time.time()
+      for i in range(n_critic):
+        losses_d = []
 
         # load the batch
+        X_batch = mnist.train.next_batch(n_batch)[0]
+        X_batch = X_batch.reshape((n_batch, 1, 28, 28))
         noise = np.random.rand(n_batch,100).astype('float32')
         feed_dict = self.load_batch(X_batch, noise)
 
         # train the critic/discriminator
-        loss_d = self.train_d(feed_dict, d0=False)
+        loss_d = self.train_d(feed_dict)
+        losses_d.append(loss_d)
 
-        # once every n_critic steps, train the generator as well
-        if (nb+1) % n_critic == 0:
-          g_step += 1
-          noise = np.random.rand(n_batch,100).astype('float32')
-          feed_dict = self.load_batch(X_batch, noise)
-          self.train_g(feed_dict)
-        
-      # log results at the end of batch
-      tr_g_err, tr_d_err, tr_p_real, tr_p_fake = self.eval_err(X_train)
-      va_g_err, va_d_err, va_p_real, va_p_fake = self.eval_err(X_val)
+      loss_d = np.array(losses_d).mean()
 
-      print "Epoch {} of {} took {:.3f}s ({} generator steps)".format(
-        epoch + 1, n_epoch, time.time() - start_time, g_step)
-      print "  training loss_g/loss_d/p_real/p_fake:\t\t{:.4f}\t{:.4f}\t{:.4f}\t{:.4f}".format(
-        tr_g_err, tr_d_err, tr_p_real, tr_p_fake)
-      print "  validation loss_g/loss_d/p_real/p_fake:\t\t{:.4f}\t{:.4f}\t{:.4f}\t{:.4f}".format(
-        va_g_err, va_d_err, va_p_real, va_p_fake)
+      # train the generator
+      # noise = np.random.rand(n_batch,100).astype('float32')
+      noise = np.random.uniform(-1.0, 1.0, [n_batch, 100]).astype('float32')
+      feed_dict = self.load_batch(X_batch, noise)
+      loss_g = self.train_g(feed_dict)
+      g_step += 1
+
+      if g_step < 100 or g_step % 100 == 0:
+        tot_time = time.time() - start_time
+        print 'Epoch: %3d, Gen step: %4d (%3.1f s), Disc loss: %.6f, Gen loss %.6f' % \
+          (mnist.train.epochs_completed, g_step, tot_time, loss_d, loss_g)
 
       # take samples
-      samples = self.gen(np.random.rand(128, 100).astype('float32'))
-      samples = samples[:42]
-      fname = logdir + '.mnist_samples-%d.png' % epoch
-      plt.imsave(fname,
-                 (samples.reshape(6, 7, 28, 28)
-                         .transpose(0, 2, 1, 3)
-                         .reshape(6*28, 7*28)),
-                 cmap='gray')
+      if g_step % 100 == 0:
+        noise = np.random.rand(n_batch,100).astype('float32')
+        samples = self.gen(noise)
+        samples = samples[:42]
+        fname = logdir + '.mnist_samples-%d.png' % g_step
+        plt.imsave(fname,
+                   (samples.reshape(6, 7, 28, 28)
+                           .transpose(0, 2, 1, 3)
+                           .reshape(6*28, 7*28)),
+                   cmap='gray')
 
       # saver.save(self.sess, checkpoint_root, global_step=step)
 
@@ -171,16 +173,12 @@ class WDCGAN(object):
     _, loss_g = self.sess.run([self.train_op_g, self.loss_g], feed_dict=feed_dict)
     return loss_g
 
-  def train_d(self, feed_dict, d0=False):
-    if not d0:
-      # take a step of RMSProp
-      self.sess.run(self.train_op_d, feed_dict=feed_dict)
-    else:
-      # take a step of Adam
-      self.sess.run(self.train_op_d0, feed_dict=feed_dict)
-
+  def train_d(self, feed_dict):
     # clip the weights, so that they fall in [-c, c]
     self.sess.run(self.clip_updates, feed_dict=feed_dict)
+
+    # take a step of RMSProp
+    self.sess.run(self.train_op_d, feed_dict=feed_dict)
 
     # return discriminator loss
     return self.sess.run(self.loss_d, feed_dict=feed_dict)
@@ -208,20 +206,6 @@ class WDCGAN(object):
       tot_p_fake += p_fake
     return tot_loss_g / (bn+1), tot_loss_d / (bn+1), \
            tot_p_real / (bn+1), tot_p_fake / (bn+1)
-
-# ----------------------------------------------------------------------------
-# helpers
-
-def iterate_minibatches(inputs, batchsize, shuffle=False):
-  if shuffle:
-    indices = np.arange(len(inputs))
-    np.random.shuffle(indices)
-  for start_idx in range(0, len(inputs) - batchsize + 1, batchsize):
-    if shuffle:
-        excerpt = indices[start_idx:start_idx + batchsize]
-    else:
-        excerpt = slice(start_idx, start_idx + batchsize)
-    yield inputs[excerpt]
     
 # ----------------------------------------------------------------------------
     
@@ -229,24 +213,24 @@ def make_dcgan_discriminator(Xk_d):
   x = Convolution2D(nb_filter=64, nb_row=5, nb_col=5, subsample=(2,2),
         activation=None, border_mode='same', init=conv2D_init,
         dim_ordering='th')(Xk_d)
-  x = BatchNormalization(axis=1)(x)
-  x = LeakyReLU(0.2)(x)
-
-  x = Convolution2D(nb_filter=64, nb_row=5, nb_col=5, subsample=(2,2),
-        activation=None, border_mode='same', init=conv2D_init,
-        dim_ordering='th')(Xk_d)
-  x = BatchNormalization(axis=1)(x)
+  x = BatchNormalization(mode=2, axis=1)(x)
   x = LeakyReLU(0.2)(x)
 
   x = Convolution2D(nb_filter=128, nb_row=5, nb_col=5, subsample=(2,2),
         activation=None, border_mode='same', init=conv2D_init,
         dim_ordering='th')(x)
-  x = BatchNormalization(axis=1)(x)
+  x = BatchNormalization(mode=2, axis=1)(x)
   x = LeakyReLU(0.2)(x)
 
+  # x = Convolution2D(nb_filter=128, nb_row=5, nb_col=5, subsample=(2,2),
+  #       activation=None, border_mode='same', init=conv2D_init,
+  #       dim_ordering='th')(x)
+  # x = BatchNormalization(mode=2, axis=1)(x)
+  # x = LeakyReLU(0.2)(x)
+
   x = Flatten()(x)
-  x = Dense(1024)(x)
-  x = BatchNormalization()(x)
+  x = Dense(1024, init=conv2D_init)(x)
+  x = BatchNormalization(mode=2, )(x)
   x = LeakyReLU(0.2)(x)
 
   d = Dense(1, activation=None)(x)
@@ -257,19 +241,19 @@ def make_dcgan_generator(Xk_g, n_lat):
   n_g_hid1 = 1024 # size of hidden layer in generator layer 1
   n_g_hid2 = 128  # size of hidden layer in generator layer 2
 
-  x = Dense(n_g_hid1)(Xk_g)
-  x = BatchNormalization()(x)
+  x = Dense(n_g_hid1, init=conv2D_init)(Xk_g)
+  x = BatchNormalization(mode=2, )(x)
   x = Activation('relu')(x)
 
-  x = Dense(n_g_hid2*7*7)(x)
+  x = Dense(n_g_hid2*7*7, init=conv2D_init)(x)
   x = Reshape((n_g_hid2, 7, 7))(x)
-  x = BatchNormalization(axis=1)(x)
+  x = BatchNormalization(mode=2, axis=1)(x)
   x = Activation('relu')(x)
 
   x = Deconvolution2D(64, 5, 5, output_shape=(128, 64, 14, 14), 
         border_mode='same', activation=None, subsample=(2,2), 
         init=conv2D_init, dim_ordering='th')(x)
-  x = BatchNormalization(axis=1)(x)
+  x = BatchNormalization(mode=2, axis=1)(x)
   x = Activation('relu')(x)
 
   g = Deconvolution2D(n_chan, 5, 5, output_shape=(128, n_chan, 28, 28), 
@@ -281,19 +265,19 @@ def make_dcgan_generator(Xk_g, n_lat):
 # ----------------------------------------------------------------------------
 
 def conv2D_init(shape, dim_ordering='tf', name=None):
-    return initializations.normal(shape, scale=0.02, dim_ordering=dim_ordering, name=name)
+  return initializations.normal(shape, scale=0.02, dim_ordering=dim_ordering, name=name)
 
 def make_tweaked_discriminator(Xk_d):
   x = Convolution2D(nb_filter=64, nb_row=3, nb_col=3, subsample=(2,2),
         activation=None, border_mode='same', init=conv2D_init, bias=False,
         dim_ordering='th')(Xk_d)
-  x = BatchNormalization(axis=1)(x)
+  x = BatchNormalization(mode=2, axis=1)(x)
   x = LeakyReLU(0.2)(x)
 
   x = Convolution2D(nb_filter=128, nb_row=3, nb_col=3, subsample=(2,2),
         activation=None, border_mode='same', init=conv2D_init, bias=False,
         dim_ordering='th')(x)
-  x = BatchNormalization(axis=1)(x)
+  x = BatchNormalization(mode=2, axis=1)(x)
   x = LeakyReLU(0.2)(x)
 
   x = Convolution2D(nb_filter=1, nb_row=3, nb_col=3, subsample=(2,2),
@@ -309,7 +293,7 @@ def make_tweaked_generator(Xk_g, n_lat):
 
   x = Dense(f*7*7)(Xk_g)
   x = Reshape((f, 7, 7))(x)
-  x = BatchNormalization()(x)
+  x = BatchNormalization(mode=2, )(x)
   x = Activation('relu')(x)
 
   x = UpSampling2D(size=(2,2))(x)
@@ -317,7 +301,7 @@ def make_tweaked_generator(Xk_g, n_lat):
   x = Convolution2D(nb_filters, 3, 3,
         border_mode='same', activation=None,
         init=conv2D_init, dim_ordering='th')(x)
-  x = BatchNormalization(axis=1)(x)
+  x = BatchNormalization(mode=2, axis=1)(x)
   x = Activation('relu')(x)
   x = Convolution2D(nb_filters, 3, 3,
         border_mode='same', activation=None,
@@ -329,7 +313,7 @@ def make_tweaked_generator(Xk_g, n_lat):
   x = Convolution2D(nb_filters, 3, 3,
         border_mode='same', activation=None,
         init=conv2D_init, dim_ordering='th')(x)
-  x = BatchNormalization(axis=1)(x)
+  x = BatchNormalization(mode=2, axis=1)(x)
   x = Activation('relu')(x)
   x = Convolution2D(nb_filters, 3, 3,
         border_mode='same', activation=None,
