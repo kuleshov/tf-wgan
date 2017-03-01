@@ -36,7 +36,8 @@ Other flags are pretty self-explanatory.
 
 These are the results you get from a fully-trained DCGAN (left) or a WGAN (right):
 
-:-------------------------:|:-------------------------:
+DCGAN             |  Wasserstein DCGAN
+:-------------------------:|:----------------------------:
 ![](img/dcgan-trained.png)  |  ![](img/wdcgan-trained.png)
 
 The results are quite similar. However, I found the training process to be quite different.
@@ -45,6 +46,7 @@ The results are quite similar. However, I found the training process to be quite
 
 The most obvious difference is that the GAN gives nice-looking numbers after less than 5 epochs (left), while the DCGAN takes nearly 100 epochs to get to the same level, and produces noise after the same 5 epochs (right):
 
+DCGAN             |  Wasserstein DCGAN
 :-------------------------:|:-------------------------:
 ![](img/dcgan-early.png)  |  ![](img/wdcgan-early.png)
 
