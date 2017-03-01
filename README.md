@@ -26,7 +26,7 @@ The model will report training/validation losses in the logfile.
 The repository contains code for a standard DC-GAN, trained using the usual GAN loss, as well as a Wasserstein GAN that uses a similar architecture.
 
 The model parameters are configures via command-line options:
-* `--model` is either `dcgan` or `wdcgan` (standard or wasserstein)
+* `--model` is either `dcgan` or `wdcgan` (standard or Wasserstein)
 * `--dataset` is only `mnist` for now
 * `--c` and `--n-critic` are the WGAN hyperparameters. The default values are the ones proposed in the paper.
 
@@ -34,13 +34,19 @@ Other flags are pretty self-explanatory.
 
 ## Observations
 
-These are the results you get from training the DCGAN (left) or the WGAN (right) for 200 epochs:
+These are the results you get from a fully-trained DCGAN (left) or a WGAN (right):
+
+:-------------------------:|:-------------------------:
+![](img/dcgan-trained.png)  |  ![](img/wdcgan-trained.png)
 
 The results are quite similar. However, I found the training process to be quite different.
 
 ### Training speed
 
-The most obvious difference is that the GAN gives nice-looking numbers after 1-2 epochs, while the DCGAN takes nearly 100 epochs to get to the same level.
+The most obvious difference is that the GAN gives nice-looking numbers after less than 5 epochs (left), while the DCGAN takes nearly 100 epochs to get to the same level, and produces noise after the same 5 epochs (right):
+
+:-------------------------:|:-------------------------:
+![](img/dcgan-early.png)  |  ![](img/wdcgan-early.png)
 
 Obviously, we only train the generator on one batch out of six by default (the other five batches are used to train the generator). However, the difference in training speed is much more than five-fold. The learning rate is also smaller for WGANs, but the same learning rate in DCGANs still gives much faster convergence. It seems like there is a deeper difference between the gradients that each method provides.
 
@@ -56,7 +62,9 @@ For example, if you add batch normalization in the first layer of the generator,
 
 The other claim made in the paper is that the Earth Mover's distance (which is approximated by the discriminator/critic loss times minus one) provides a useful metric of convergence. Lower losses should correspond to higher-quality images.
 
-That, I have found to be completely accurate. At first, the discriminator loss goes down, as the critic learns to tell apart the good and the bad examples. Then, the generator starts training and forces the discriminator's loss to steadily go up until convergence. In the above case (when I add a batch norm and the model doesn't train well), the Earth Mover's distance indeed gets stuck at a high plateau.
+That, I have found to be completely accurate. At first, the discriminator loss goes down, as the critic learns to tell apart the real examples from the fake ones. Then, the generator starts training and forces the discriminator's loss to steadily go up until convergence. 
+
+In the above case (when I add a batch norm and the model doesn't train well), the Earth Mover's distance indeed gets stuck at a high plateau.
 
 ## Feedback
 
