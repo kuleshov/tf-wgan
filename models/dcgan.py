@@ -6,12 +6,14 @@ import tensorflow as tf
 
 import matplotlib.pyplot as plt
 
-from keras.layers.convolutional import Convolution2D, Deconvolution2D, ZeroPadding2D
+from keras.layers.convolutional import Convolution2D, Deconvolution2D, UpSampling2D
+from keras.layers.pooling import GlobalAveragePooling2D
 from keras.layers.normalization import BatchNormalization
 from keras.layers.advanced_activations import LeakyReLU
 from keras.layers.core import Dense, Reshape, Flatten, Activation
 from keras.layers import Input
 from keras.models import Model
+from keras import initializations
 
 # ----------------------------------------------------------------------------
 
@@ -23,9 +25,6 @@ class DCGAN(object):
   def __init__(self, n_dim, n_chan=1, opt_alg='adam', opt_params=default_opt):
     # set up some default hyper-params
     n_lat = 100 # latent variables
-    n_g_hid1 = 1024 # size of hidden layer in generator layer 1
-    n_g_hid2 = 128  # size of hidden layer in generator layer 2
-    n_out = n_dim * n_dim * n_chan # total dimensionality of output
 
     # create session
     self.sess = tf.Session()
@@ -34,45 +33,14 @@ class DCGAN(object):
     # create generator
     with tf.name_scope('generator'):
       Xk_g = Input(shape=(n_lat,))
-
-      x = Dense(n_g_hid1, activation='relu')(Xk_g)
-      x = Dense(n_g_hid2*7*7, activation='relu')(x)
-      x = Reshape((n_g_hid2, 7, 7))(x)
-      x = Deconvolution2D(64, 5, 5, output_shape=(128, 64, 14, 14), 
-            border_mode='same', activation=None, subsample=(2,2), 
-            init='orthogonal', dim_ordering='th')(x)
-      x = BatchNormalization()(x)
-      x = Activation('relu')(x)
-      g = Deconvolution2D(n_chan, 5, 5, output_shape=(128, n_chan, 28, 28), 
-            border_mode='same', activation='sigmoid', subsample=(2,2), 
-            init='orthogonal', dim_ordering='th')(x)
+      g = make_tweaked_generator(Xk_g, n_lat)
 
     # create discriminator
     with tf.name_scope('discriminator'):
       Xk_d = Input(shape=(n_chan, n_dim, n_dim))
+      d = make_dcgan_discriminator(Xk_d)
 
-      x = ZeroPadding2D(padding=(2,2), dim_ordering='th')(x)
-      x = Convolution2D(nb_filter=64, nb_row=5, nb_col=5, subsample=(2,2),
-            activation=None, border_mode='valid', init='glorot_uniform',
-            dim_ordering='th')(Xk_d)
-      x = BatchNormalization()(x)
-      x = LeakyReLU(0.2)(x)
-
-      x = ZeroPadding2D(padding=(2,2), dim_ordering='th')(x)
-      x = Convolution2D(nb_filter=128, nb_row=5, nb_col=5, subsample=(2,2),
-            activation=None, border_mode='valid', init='glorot_uniform',
-            dim_ordering='th')(x)
-      x = BatchNormalization()(x)
-      x = LeakyReLU(0.2)(x)
-
-      x = Flatten()(x)
-      x = Dense(1024)(x)
-      x = BatchNormalization()(x)
-      x = LeakyReLU(0.2)(x)
-
-      d = Dense(1, activation=None)(x)
-
-    # save inputs
+    # create input placeholders
     X_g = tf.placeholder(tf.float32, shape=(None, n_lat), name='X_g')
     X_d = tf.placeholder(tf.float32, shape=(None, n_chan, n_dim, n_dim), name='X_d')
     self.inputs = X_g, X_d
@@ -89,8 +57,6 @@ class DCGAN(object):
     d_real = d_net(X_d)
     d_fake = d_net(g_net(X_g))
     self.P = g_net(X_g)
-
-    print d_fake.get_shape()
 
     # create losses
     one  = np.array([[1]]).astype('float32')
@@ -230,4 +196,52 @@ def iterate_minibatches(inputs, batchsize, shuffle=False):
     else:
         excerpt = slice(start_idx, start_idx + batchsize)
     yield inputs[excerpt]
+
+# ----------------------------------------------------------------------------
     
+def make_dcgan_discriminator(Xk_d):
+  x = Convolution2D(nb_filter=64, nb_row=5, nb_col=5, subsample=(2,2),
+        activation=None, border_mode='same', init='glorot_uniform',
+        dim_ordering='th')(Xk_d)
+  x = BatchNormalization(axis=1)(x)
+  x = LeakyReLU(0.2)(x)
+
+  x = Convolution2D(nb_filter=128, nb_row=5, nb_col=5, subsample=(2,2),
+        activation=None, border_mode='same', init='glorot_uniform',
+        dim_ordering='th')(x)
+  x = BatchNormalization(axis=1)(x)
+  x = LeakyReLU(0.2)(x)
+
+  x = Flatten()(x)
+  x = Dense(1024)(x)
+  x = BatchNormalization()(x)
+  x = LeakyReLU(0.2)(x)
+
+  d = Dense(1, activation=None)(x)
+
+  return d
+
+def make_dcgan_generator(Xk_g, n_lat):
+  n_g_hid1 = 1024 # size of hidden layer in generator layer 1
+  n_g_hid2 = 128  # size of hidden layer in generator layer 2
+
+  x = Dense(n_g_hid1)(Xk_g)
+  x = BatchNormalization()(x)
+  x = Activation('relu')(x)
+
+  x = Dense(n_g_hid2*7*7)(x)
+  x = Reshape((n_g_hid2, 7, 7))(x)
+  x = BatchNormalization(axis=1)(x)
+  x = Activation('relu')(x)
+
+  x = Deconvolution2D(64, 5, 5, output_shape=(128, 64, 14, 14), 
+        border_mode='same', activation=None, subsample=(2,2), 
+        init='orthogonal', dim_ordering='th')(x)
+  x = BatchNormalization(axis=1)(x)
+  x = Activation('relu')(x)
+
+  g = Deconvolution2D(n_chan, 5, 5, output_shape=(128, n_chan, 28, 28), 
+        border_mode='same', activation='sigmoid', subsample=(2,2), 
+        init='orthogonal', dim_ordering='th')(x)
+
+  return g
