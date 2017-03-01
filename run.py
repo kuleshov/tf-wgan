@@ -17,7 +17,6 @@ def make_parser():
   train_parser.add_argument('--model', default='dcgan')
   train_parser.add_argument('-e', '--epochs', type=int, default=10)
   train_parser.add_argument('-l', '--logdir', default='logs/mnist-run')
-  train_parser.add_argument('--alg', default='rmsprop')
   train_parser.add_argument('--lr', type=float, default=1e-3)
   train_parser.add_argument('--c', type=float, default=1e-2)
   train_parser.add_argument('--n-critic', type=int, default=5)
@@ -47,11 +46,9 @@ def train(args):
 
   # create model
   if args.model == 'dcgan':
-    model = models.DCGAN(n_dim=n_dim, n_chan=n_channels,
-                         opt_alg=args.alg, opt_params=opt_params)
+    model = models.DCGAN(n_dim=n_dim, n_chan=n_channels, opt_params=opt_params)
   elif args.model == 'wdcgan':
-    model = models.WDCGAN(n_dim=n_dim, n_chan=n_channels,
-                         opt_alg=args.alg, opt_params=opt_params)    
+    model = models.WDCGAN(n_dim=n_dim, n_chan=n_channels, opt_params=opt_params)    
   else:
     raise ValueError('Invalid model')
   
