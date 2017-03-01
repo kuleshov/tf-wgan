@@ -4,6 +4,9 @@ import numpy as np
 import keras.backend as K
 import tensorflow as tf
 
+import tensorflow.contrib as tc
+import tensorflow.contrib.layers as tcl
+
 import matplotlib.pyplot as plt
 
 from keras.layers.convolutional import Convolution2D, Deconvolution2D, UpSampling2D
@@ -44,27 +47,36 @@ class WDCGAN(object):
     # create generator
     with tf.name_scope('generator'):
       Xk_g = Input(shape=(n_lat,))
-      g = make_dcgan_generator(Xk_g, n_lat)
+      g = make_keras_dcgan_generator(Xk_g, n_lat)
       # g = make_tweaked_generator(Xk_g, n_lat)
 
     # create discriminator
     with tf.name_scope('discriminator'):
       Xk_d = Input(shape=(n_chan, n_dim, n_dim))
-      d = make_dcgan_discriminator(Xk_d)
+      d = make_keras_dcgan_discriminator(Xk_d)
       # d = make_tweaked_discriminator(Xk_d)
+
+    # instantiate networks
+    g_net = Model(input=Xk_g, output=g)
+    d_net = Model(input=Xk_d, output=d)
 
     # save inputs
     X_g = tf.placeholder(tf.float32, shape=(None, n_lat), name='X_g')
     X_d = tf.placeholder(tf.float32, shape=(None, n_chan, n_dim, n_dim), name='X_d')
     self.inputs = X_g, X_d
 
-    # instantiate networks
-    g_net = Model(input=Xk_g, output=g)
-    d_net = Model(input=Xk_d, output=d)
+    # # create generator
+    # g = make_dcgan_generator(X_g, n_lat)
+    # d_real = make_dcgan_discriminator(X_d)
+    # d_fake = make_dcgan_discriminator(g, reuse=True)
+    # self.P = g
 
     # get their weights
-    self.w_g = [w for l in g_net.layers for w in l.trainable_weights]
-    self.w_d = [w for l in d_net.layers for w in l.trainable_weights]
+    # self.w_g = [w for l in g_net.layers for w in l.trainable_weights]
+    # self.w_d = [w for l in d_net.layers for w in l.trainable_weights]
+
+    self.w_g = [w for w in tf.global_variables() if 'generator' in w.name]
+    self.w_d = [w for w in tf.global_variables() if 'discriminator' in w.name]
 
     # create predictions
     d_real = d_net(X_d)
@@ -206,17 +218,90 @@ class WDCGAN(object):
       tot_p_fake += p_fake
     return tot_loss_g / (bn+1), tot_loss_d / (bn+1), \
            tot_p_real / (bn+1), tot_p_fake / (bn+1)
+
+# ----------------------------------------------------------------------------
+
+def make_dcgan_discriminator(x, reuse=False):
+  with tf.variable_scope('discriminator', reuse=reuse):
+    bs = tf.shape(x)[0]
+    x = tf.reshape(x, [bs, 28, 28, 1])
+    x = tf.transpose(x, [0, 3, 1, 2])
+    conv1 = tc.layers.convolution2d(
+        x, 64, [4, 4], [2, 2],
+        weights_initializer=tf.random_normal_initializer(stddev=0.02),
+        activation_fn=tf.identity
+    )
+    conv1 = leaky_relu(conv1)
+    conv2 = tc.layers.convolution2d(
+        conv1, 128, [4, 4], [2, 2],
+        weights_initializer=tf.random_normal_initializer(stddev=0.02),
+        activation_fn=tf.identity
+    )
+    conv2 = leaky_relu(tc.layers.batch_norm(conv2))
+    conv3 = tc.layers.convolution2d(
+        conv2, 128, [4, 4], [1, 1],
+        weights_initializer=tf.random_normal_initializer(stddev=0.02),
+        activation_fn=tf.identity
+    )
+    conv3 = leaky_relu(tc.layers.batch_norm(conv3))
+    conv3 = tcl.flatten(conv3)
+    fc1 = tc.layers.fully_connected(
+        conv3, 1024,
+        weights_initializer=tf.random_normal_initializer(stddev=0.02),
+        activation_fn=tf.identity
+    )
+    fc1 = leaky_relu(tc.layers.batch_norm(fc1))
+    fc2 = tc.layers.fully_connected(fc1, 1, activation_fn=tf.identity)
+  return fc2
+
+def make_dcgan_generator(z, reuse=False):
+  with tf.variable_scope('generator'):
+    bs = tf.shape(z)[0]
+    fc1 = tc.layers.fully_connected(
+        z, 1024,
+        weights_initializer=tf.random_normal_initializer(stddev=0.02),
+        weights_regularizer=tc.layers.l2_regularizer(2.5e-5),
+        activation_fn=tf.identity
+    )
+    fc1 = tc.layers.batch_norm(fc1)
+    fc1 = tf.nn.relu(fc1)
+    fc2 = tc.layers.fully_connected(
+        fc1, 7 * 7 * 128,
+        weights_initializer=tf.random_normal_initializer(stddev=0.02),
+        weights_regularizer=tc.layers.l2_regularizer(2.5e-5),
+        activation_fn=tf.identity
+    )
+    fc2 = tf.reshape(fc2, tf.pack([bs, 7, 7, 128]))
+    fc2 = tc.layers.batch_norm(fc2)
+    fc2 = tf.nn.relu(fc2)
+    conv1 = tc.layers.convolution2d_transpose(
+        fc2, 64, [4, 4], [2, 2],
+        weights_initializer=tf.random_normal_initializer(stddev=0.02),
+        weights_regularizer=tc.layers.l2_regularizer(2.5e-5),
+        activation_fn=tf.identity
+    )
+    conv1 = tc.layers.batch_norm(conv1)
+    conv1 = tf.nn.relu(conv1)
+    conv2 = tc.layers.convolution2d_transpose(
+        conv1, 1, [4, 4], [2, 2],
+        weights_initializer=tf.random_normal_initializer(stddev=0.02),
+        weights_regularizer=tc.layers.l2_regularizer(2.5e-5),
+        activation_fn=tf.sigmoid
+    )
+    # conv2 = tf.reshape(conv2, tf.pack([bs, 784]))
+    conv2 = tf.transpose(conv2, [0,3,1,2])
+  return conv2
     
 # ----------------------------------------------------------------------------
     
-def make_dcgan_discriminator(Xk_d):
-  x = Convolution2D(nb_filter=64, nb_row=5, nb_col=5, subsample=(2,2),
+def make_keras_dcgan_discriminator(Xk_d):
+  x = Convolution2D(nb_filter=64, nb_row=4, nb_col=4, subsample=(2,2),
         activation=None, border_mode='same', init=conv2D_init,
         dim_ordering='th')(Xk_d)
   x = BatchNormalization(mode=2, axis=1)(x)
   x = LeakyReLU(0.2)(x)
 
-  x = Convolution2D(nb_filter=128, nb_row=5, nb_col=5, subsample=(2,2),
+  x = Convolution2D(nb_filter=128, nb_row=4, nb_col=4, subsample=(2,2),
         activation=None, border_mode='same', init=conv2D_init,
         dim_ordering='th')(x)
   x = BatchNormalization(mode=2, axis=1)(x)
@@ -230,14 +315,14 @@ def make_dcgan_discriminator(Xk_d):
 
   x = Flatten()(x)
   x = Dense(1024, init=conv2D_init)(x)
-  x = BatchNormalization(mode=2, )(x)
+  x = BatchNormalization(mode=2)(x)
   x = LeakyReLU(0.2)(x)
 
   d = Dense(1, activation=None)(x)
 
   return d
 
-def make_dcgan_generator(Xk_g, n_lat):
+def make_keras_dcgan_generator(Xk_g, n_lat):
   n_g_hid1 = 1024 # size of hidden layer in generator layer 1
   n_g_hid2 = 128  # size of hidden layer in generator layer 2
 
@@ -266,6 +351,9 @@ def make_dcgan_generator(Xk_g, n_lat):
 
 def conv2D_init(shape, dim_ordering='tf', name=None):
   return initializations.normal(shape, scale=0.02, dim_ordering=dim_ordering, name=name)
+
+def leaky_relu(x, alpha=0.2):
+    return tf.maximum(tf.minimum(0.0, alpha * x), x)  
 
 def make_tweaked_discriminator(Xk_d):
   x = Convolution2D(nb_filter=64, nb_row=3, nb_col=3, subsample=(2,2),
