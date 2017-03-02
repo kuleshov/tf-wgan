@@ -58,7 +58,7 @@ Several others have also reported that WGANs were relatively slow to train. Soum
 
 One of the central claims of the WGAN paper is that WGANs are much less sensitive to hyperparameter choices and to the model architecture. I am not yet convinced that it is completely true.
 
-For example, if you add batch normalization in the first layer of the generator, the WGAN starts giving really bad results (even after hundreds of epochs; it's commented out in the code). However, having batch norm in the first layer of the standard DCGAN works perfectly fine for me. I'm a bit disappointed to see this happening on a dataset as simple as MNIST.
+For example, if you add batch normalization in the first layer of the discriminator, the WGAN starts giving really bad results (even after hundreds of epochs; it's commented out in the code). However, having batch norm in the first layer of the standard DCGAN works perfectly fine for me. I'm a bit disappointed to see this happening on a dataset as simple as MNIST.
 
 ### Convergence metric
 
