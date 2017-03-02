@@ -24,7 +24,6 @@ from tensorflow.examples.tutorials.mnist import input_data
 # ----------------------------------------------------------------------------
 
 default_opt = { 'lr' : 5e-5, 'c' : 1e-2, 'n_critic' : 5 }
-n_chan = 1
 
 class WDCGAN(object):
   """Wasserstein Deep Convolutional Generative Adversarial Network"""
@@ -32,6 +31,7 @@ class WDCGAN(object):
   def __init__(self, n_dim, n_chan=1, opt_alg='rmsprop', opt_params=default_opt):
     self.n_critic = opt_params['n_critic']
     self.c        = opt_params['c']
+    n_lat = 100
 
     # create session
     self.sess = tf.Session()
@@ -40,7 +40,7 @@ class WDCGAN(object):
     # create generator
     with tf.name_scope('generator'):
       Xk_g = Input(shape=(n_lat,))
-      g = make_dcgan_generator(Xk_g, n_lat)
+      g = make_dcgan_generator(Xk_g, n_lat, n_chan)
 
     # create discriminator
     with tf.name_scope('discriminator'):
@@ -195,7 +195,9 @@ class WDCGAN(object):
 
     
 # ----------------------------------------------------------------------------
-    
+def conv2D_init(shape, dim_ordering='tf', name=None):
+   return initializations.normal(shape, scale=0.02, dim_ordering=dim_ordering, name=name)
+
 def make_dcgan_discriminator(Xk_d):
   x = Convolution2D(nb_filter=64, nb_row=4, nb_col=4, subsample=(2,2),
         activation=None, border_mode='same', init=conv2D_init,
@@ -218,7 +220,7 @@ def make_dcgan_discriminator(Xk_d):
 
   return d
 
-def make_dcgan_generator(Xk_g, n_lat):
+def make_dcgan_generator(Xk_g, n_lat, n_chan=1):
   n_g_hid1 = 1024 # size of hidden layer in generator layer 1
   n_g_hid2 = 128  # size of hidden layer in generator layer 2
 

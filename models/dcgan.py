@@ -6,8 +6,7 @@ import tensorflow as tf
 
 import matplotlib.pyplot as plt
 
-from keras.layers.convolutional import Convolution2D, Deconvolution2D, UpSampling2D
-from keras.layers.pooling import GlobalAveragePooling2D
+from keras.layers.convolutional import Convolution2D, Deconvolution2D
 from keras.layers.normalization import BatchNormalization
 from keras.layers.advanced_activations import LeakyReLU
 from keras.layers.core import Dense, Reshape, Flatten, Activation
@@ -65,9 +64,6 @@ class DCGAN(object):
     self.loss_g = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(d_fake, one))
     self.loss_d = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(d_real, one)) \
                 + tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(d_fake, zero))
-    # self.loss_g = tf.reduce_mean(K.binary_crossentropy(d_fake, one))
-    # self.loss_d = tf.reduce_mean(K.binary_crossentropy(d_real, one)) \
-    #             + tf.reduce_mean(K.binary_crossentropy(d_fake, zero))
 
     # compute and store discriminator probabilities
     self.d_real = tf.reduce_mean(tf.sigmoid(d_real))
@@ -130,9 +126,9 @@ class DCGAN(object):
 
       print "Epoch {} of {} took {:.3f}s ({} minibatches)".format(
         epoch + 1, n_epoch, time.time() - start_time, len(X_train) // n_batch)
-      print "  training loss/p_real/p_fake:\t\t{:.4f}\t{:.4f}\t{:.2f}\t{:.2f}".format(
+      print "  training disc_loss/gen_loss/p_real/p_fake:\t\t{:.4f}\t{:.4f}\t{:.2f}\t{:.2f}".format(
         tr_g_err, tr_d_err, tr_p_real, tr_p_fake)
-      print "  validation loss/p_real/p_fake:\t{:.4f}\t{:.4f}\t{:.2f}\t{:.2f}".format(
+      print "  validation disc_loss/gen_loss/p_real/p_fake:\t\t{:.4f}\t{:.4f}\t{:.2f}\t{:.2f}".format(
         va_g_err, va_d_err, va_p_real, va_p_fake)
 
       # take samples
@@ -204,18 +200,18 @@ def make_dcgan_discriminator(Xk_d):
   x = Convolution2D(nb_filter=64, nb_row=5, nb_col=5, subsample=(2,2),
         activation=None, border_mode='same', init='glorot_uniform',
         dim_ordering='th')(Xk_d)
-  x = BatchNormalization(axis=1)(x)
+  x = BatchNormalization(mode=2, axis=1)(x)
   x = LeakyReLU(0.2)(x)
 
   x = Convolution2D(nb_filter=128, nb_row=5, nb_col=5, subsample=(2,2),
         activation=None, border_mode='same', init='glorot_uniform',
         dim_ordering='th')(x)
-  x = BatchNormalization(axis=1)(x)
+  x = BatchNormalization(mode=2, axis=1)(x)
   x = LeakyReLU(0.2)(x)
 
   x = Flatten()(x)
   x = Dense(1024)(x)
-  x = BatchNormalization()(x)
+  x = BatchNormalization(mode=2)(x)
   x = LeakyReLU(0.2)(x)
 
   d = Dense(1, activation=None)(x)
@@ -227,18 +223,18 @@ def make_dcgan_generator(Xk_g, n_lat, n_chan=1):
   n_g_hid2 = 128  # size of hidden layer in generator layer 2
 
   x = Dense(n_g_hid1)(Xk_g)
-  x = BatchNormalization()(x)
+  x = BatchNormalization(mode=2)(x)
   x = Activation('relu')(x)
 
   x = Dense(n_g_hid2*7*7)(x)
-  x = Reshape((n_g_hid2, 7, 7))(x)
-  x = BatchNormalization(axis=1)(x)
+  x = BatchNormalization(mode=2)(x)
   x = Activation('relu')(x)
+  x = Reshape((n_g_hid2, 7, 7))(x)
 
   x = Deconvolution2D(64, 5, 5, output_shape=(128, 64, 14, 14), 
         border_mode='same', activation=None, subsample=(2,2), 
         init='orthogonal', dim_ordering='th')(x)
-  x = BatchNormalization(axis=1)(x)
+  x = BatchNormalization(mode=2, axis=1)(x)
   x = Activation('relu')(x)
 
   g = Deconvolution2D(n_chan, 5, 5, output_shape=(128, n_chan, 28, 28), 
