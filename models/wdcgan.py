@@ -4,20 +4,15 @@ import numpy as np
 import keras.backend as K
 import tensorflow as tf
 
-import tensorflow.contrib as tc
-import tensorflow.contrib.layers as tcl
-
 import matplotlib.pyplot as plt
 
-from keras.layers.convolutional import Convolution2D, Deconvolution2D, UpSampling2D
-from keras.layers.pooling import GlobalAveragePooling2D
+from keras.layers.convolutional import Convolution2D, Deconvolution2D
 from keras.layers.normalization import BatchNormalization
 from keras.layers.advanced_activations import LeakyReLU
 from keras.layers.core import Dense, Reshape, Flatten, Activation
 from keras.layers import Input
 from keras.models import Model
 from keras import initializations
-from keras.regularizers import l1, l2, l1l2
 
 from tensorflow.examples.tutorials.mnist import input_data
 
@@ -125,8 +120,8 @@ class WDCGAN(object):
       loss_d = np.array(losses_d).mean()
 
       # train the generator
-      # noise = np.random.rand(n_batch,100).astype('float32')
-      noise = np.random.uniform(-1.0, 1.0, [n_batch, 100]).astype('float32')
+      noise = np.random.rand(n_batch,100).astype('float32')
+      # noise = np.random.uniform(-1.0, 1.0, [n_batch, 100]).astype('float32')
       feed_dict = self.load_batch(X_batch, noise)
       loss_g = self.train_g(feed_dict)
       g_step += 1
@@ -195,6 +190,7 @@ class WDCGAN(object):
 
     
 # ----------------------------------------------------------------------------
+
 def conv2D_init(shape, dim_ordering='tf', name=None):
    return initializations.normal(shape, scale=0.02, dim_ordering=dim_ordering, name=name)
 
