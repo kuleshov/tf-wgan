@@ -33,7 +33,7 @@ class DCGAN(object):
     # create generator
     with tf.name_scope('generator'):
       Xk_g = Input(shape=(n_lat,))
-      g = make_tweaked_generator(Xk_g, n_lat)
+      g = make_dcgan_generator(Xk_g, n_lat, n_chan)
 
     # create discriminator
     with tf.name_scope('discriminator'):
@@ -132,13 +132,14 @@ class DCGAN(object):
         epoch + 1, n_epoch, time.time() - start_time, len(X_train) // n_batch)
       print "  training loss/p_real/p_fake:\t\t{:.4f}\t{:.4f}\t{:.2f}\t{:.2f}".format(
         tr_g_err, tr_d_err, tr_p_real, tr_p_fake)
-      print "  validation loss/p_real/p_fake:\t\t{:.4f}\t{:.4f}\t{:.2f}\t{:.2f}".format(
+      print "  validation loss/p_real/p_fake:\t{:.4f}\t{:.4f}\t{:.2f}\t{:.2f}".format(
         va_g_err, va_d_err, va_p_real, va_p_fake)
 
       # take samples
       samples = self.gen(np.random.rand(128, 100).astype('float32'))
       samples = samples[:42]
-      plt.imsave('mnist_samples.png',
+      fname = logdir + '/dcgan.mnist_samples-%d.png' % (epoch+1)
+      plt.imsave(fname,
                  (samples.reshape(6, 7, 28, 28)
                          .transpose(0, 2, 1, 3)
                          .reshape(6*28, 7*28)),
@@ -221,7 +222,7 @@ def make_dcgan_discriminator(Xk_d):
 
   return d
 
-def make_dcgan_generator(Xk_g, n_lat):
+def make_dcgan_generator(Xk_g, n_lat, n_chan=1):
   n_g_hid1 = 1024 # size of hidden layer in generator layer 1
   n_g_hid2 = 128  # size of hidden layer in generator layer 2
 
